@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Office Chaos",
+    "slug": "office-chaos",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0d1b2a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.officechaos.game",
+      "requireFullScreen": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0d1b2a"
+      },
+      "package": "com.officechaos.game",
+      "screenOrientation": "landscape"
+    },
+    "plugins": [
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "LANDSCAPE"
+        }
+      ]
+    ]
+  }
+}
