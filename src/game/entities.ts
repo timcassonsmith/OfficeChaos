@@ -15,7 +15,14 @@ import {
 } from './constants';
 import type { CharacterProfile } from './profiles';
 import { pickSpriteId } from './spriteAtlas';
-import { SCENE_DESKS, SCENE_POI, type SceneDesk, type ScenePoint } from './sceneLayout';
+import {
+  SCENE_DESKS,
+  SCENE_POI,
+  type SceneDesk,
+  type ScenePoint,
+  findPath,
+  pushOutOfObstacles,
+} from './sceneLayout';
 import type { GameEngine } from './GameEngine';
 
 export { WAKE_ACTIONS, BOSS_ACTIONS };
@@ -29,6 +36,8 @@ export class Worker {
   wy: number;
   targetWx: number;
   targetWy: number;
+  /** Remaining waypoints (not including the current target). */
+  waypoints: ScenePoint[] = [];
   desk: SceneDesk;
   spriteId: string;
   hairColor: string;
@@ -138,6 +147,7 @@ export class Worker {
   private snapToSeat(dt: number) {
     this.targetWx = this.desk.seatWx;
     this.targetWy = this.desk.seatWy;
+    this.waypoints = [];
     this.wx = lerp(this.wx, this.desk.seatWx, Math.min(1, dt * 8));
     this.wy = lerp(this.wy, this.desk.seatWy, Math.min(1, dt * 8));
     this.atDesk = true;
@@ -159,15 +169,15 @@ export class Worker {
       this.state = WORKER_STATES.BREAK;
       const poi = pickRandom([SCENE_POI.vending, SCENE_POI.coffee, SCENE_POI.sofa, SCENE_POI.cooler]);
       this.breakSpot = { ...poi };
-      this.setTarget(poi.wx, poi.wy);
+      this.startJourney(poi.wx, poi.wy);
       this.atDesk = false;
     } else {
+      // Wander — target is always in the safe centre aisle to avoid obstacles
       this.state = WORKER_STATES.WALKING;
       this.atDesk = false;
-      this.setTarget(
-        clamp(this.desk.seatWx + (Math.random() * 0.06 - 0.03), 0.12, 0.88),
-        clamp(this.desk.seatWy + (Math.random() * 0.04 - 0.02), 0.45, 0.85),
-      );
+      const wanderX = 0.32 + Math.random() * 0.36; // 0.32–0.68 (centre aisle)
+      const wanderY = clamp(this.desk.seatWy + (Math.random() * 0.12 - 0.06), 0.52, 0.88);
+      this.startJourney(wanderX, wanderY);
     }
   }
 
@@ -185,29 +195,65 @@ export class Worker {
   }
 
   goToDesk() {
-    this.targetWx = this.desk.seatWx;
-    this.targetWy = this.desk.seatWy;
+    this.startJourney(this.desk.seatWx, this.desk.seatWy);
     this.atDesk = false;
   }
 
+  /**
+   * Plan a collision-free path to (wx, wy) and begin moving.
+   * Replaces the old bare setTarget().
+   */
+  startJourney(wx: number, wy: number) {
+    const path = findPath({ wx: this.wx, wy: this.wy }, { wx, wy });
+    if (path.length > 0) {
+      this.targetWx = path[0].wx;
+      this.targetWy = path[0].wy;
+      this.waypoints = path.slice(1);
+    }
+  }
+
+  /** Immediate target override (no path planning) — only for dynamic tracking. */
   setTarget(wx: number, wy: number) {
     this.targetWx = wx;
     this.targetWy = wy;
+    this.waypoints = [];
   }
 
   moveTowardTarget(dt: number) {
     const dx = this.targetWx - this.wx;
     const dy = this.targetWy - this.wy;
     const d = Math.hypot(dx, dy);
-    if (d < 0.008) {
+
+    if (d < 0.012) {
       this.wx = this.targetWx;
       this.wy = this.targetWy;
-      if (this.state === WORKER_STATES.WORKING) this.atDesk = true;
+
+      if (this.waypoints.length > 0) {
+        // Advance to next waypoint
+        this.targetWx = this.waypoints[0].wx;
+        this.targetWy = this.waypoints[0].wy;
+        this.waypoints = this.waypoints.slice(1);
+      } else {
+        if (this.state === WORKER_STATES.WORKING) this.atDesk = true;
+      }
       return;
     }
+
     const speed = CONFIG.workerSpeed * dt;
-    this.wx += (dx / d) * speed;
-    this.wy += (dy / d) * speed;
+    let newWx = this.wx + (dx / d) * speed;
+    let newWy = this.wy + (dy / d) * speed;
+
+    // Final destination for obstacle-avoidance check
+    const finalDestWx = this.waypoints.length > 0
+      ? this.waypoints[this.waypoints.length - 1].wx
+      : this.targetWx;
+    const finalDestWy = this.waypoints.length > 0
+      ? this.waypoints[this.waypoints.length - 1].wy
+      : this.targetWy;
+
+    const pushed = pushOutOfObstacles(newWx, newWy, finalDestWx, finalDestWy);
+    this.wx = pushed.wx;
+    this.wy = pushed.wy;
     this.facing = dx >= 0 ? 1 : -1;
     this.atDesk = false;
   }
@@ -215,9 +261,13 @@ export class Worker {
   private updateMission(dt: number, game: GameEngine) {
     const m = this.onMission!;
     if (m.type === 'walk') {
-      this.setTarget(m.wx, m.wy);
+      // Plan path only once, on the first frame of this mission
+      if (!m.pathStarted) {
+        this.startJourney(m.wx, m.wy);
+        m.pathStarted = true;
+      }
       this.moveTowardTarget(dt);
-      if (dist(this, m) < 0.025) m.onArrive?.(this, game);
+      if (dist(this, { wx: m.wx, wy: m.wy }) < 0.025) m.onArrive?.(this, game);
     } else if (m.type === 'distract') {
       this.state = WORKER_STATES.DISTRACTING;
       m.timer -= dt;
@@ -279,15 +329,19 @@ export class Boss {
   wy = SCENE_POI.bossDoor.wy;
   targetWx = SCENE_POI.bossDoor.wx;
   targetWy = SCENE_POI.bossDoor.wy;
+  waypoints: ScenePoint[] = [];
   delayTimer = 0;
   facing = 1;
   anim = 0;
+  /** Last sleepy-worker position used to plan the boss path */
+  private pathTarget: ScenePoint = { wx: -1, wy: -1 };
 
   reset() {
     this.active = false;
     this.wx = SCENE_POI.bossDoor.wx;
     this.wy = SCENE_POI.bossDoor.wy + 0.02;
     this.delayTimer = 0;
+    this.waypoints = [];
   }
 
   spawn() {
@@ -295,6 +349,8 @@ export class Boss {
     this.wx = SCENE_POI.bossDoor.wx;
     this.wy = SCENE_POI.bossDoor.wy + 0.02;
     this.delayTimer = 0;
+    this.waypoints = [];
+    this.pathTarget = { wx: -1, wy: -1 };
   }
 
   update(dt: number, game: GameEngine) {
@@ -307,23 +363,59 @@ export class Boss {
       this.delayTimer -= dt;
       return;
     }
+
     const sleepy = game.getSleepyWorker();
     if (!sleepy) return;
 
-    this.targetWx = sleepy.wx;
-    this.targetWy = sleepy.wy;
+    // Re-plan if the sleepy worker's position changed significantly
+    const targetMoved =
+      Math.hypot(sleepy.wx - this.pathTarget.wx, sleepy.wy - this.pathTarget.wy) > 0.06;
+
+    if (this.waypoints.length === 0 || targetMoved) {
+      const path = findPath({ wx: this.wx, wy: this.wy }, { wx: sleepy.wx, wy: sleepy.wy });
+      if (path.length > 0) {
+        this.targetWx = path[0].wx;
+        this.targetWy = path[0].wy;
+        this.waypoints = path.slice(1);
+      }
+      this.pathTarget = { wx: sleepy.wx, wy: sleepy.wy };
+    }
+
     const dx = this.targetWx - this.wx;
     const dy = this.targetWy - this.wy;
     const d = Math.hypot(dx, dy);
-    if (d < 0.05) {
-      if (sleepy.state === WORKER_STATES.SLEEPING || sleepy.wakeMeter >= CONFIG.sleepThreshold) {
-        game.lose('The boss caught someone sleeping on the job!');
+
+    if (d < 0.04) {
+      this.wx = this.targetWx;
+      this.wy = this.targetWy;
+
+      if (this.waypoints.length > 0) {
+        this.targetWx = this.waypoints[0].wx;
+        this.targetWy = this.waypoints[0].wy;
+        this.waypoints = this.waypoints.slice(1);
+      } else {
+        // Reached the sleepy worker
+        if (sleepy.state === WORKER_STATES.SLEEPING || sleepy.wakeMeter >= CONFIG.sleepThreshold) {
+          game.lose('The boss caught someone sleeping on the job!');
+        }
       }
       return;
     }
+
     const speed = game.bossSpeed * dt;
-    this.wx += (dx / d) * speed;
-    this.wy += (dy / d) * speed;
+    let newWx = this.wx + (dx / d) * speed;
+    let newWy = this.wy + (dy / d) * speed;
+
+    // Push out of obstacles (allowed into desk where sleepy worker is sitting)
+    const finalDestWx = this.waypoints.length > 0
+      ? this.waypoints[this.waypoints.length - 1].wx
+      : this.targetWx;
+    const finalDestWy = this.waypoints.length > 0
+      ? this.waypoints[this.waypoints.length - 1].wy
+      : this.targetWy;
+    const pushed = pushOutOfObstacles(newWx, newWy, finalDestWx, finalDestWy);
+    this.wx = pushed.wx;
+    this.wy = pushed.wy;
     this.facing = dx >= 0 ? 1 : -1;
   }
 
@@ -356,19 +448,22 @@ export class Effect {
 }
 
 type Mission =
-  | { type: 'walk'; wx: number; wy: number; action?: WakeAction; onArrive?: (w: Worker, g: GameEngine) => void }
+  | {
+      type: 'walk';
+      wx: number;
+      wy: number;
+      pathStarted?: boolean;
+      action?: WakeAction;
+      onArrive?: (w: Worker, g: GameEngine) => void;
+    }
   | { type: 'distract'; timer: number; icon?: string };
 
 function pickDuration(state: WorkerState) {
   switch (state) {
-    case WORKER_STATES.WORKING:
-      return 20 + Math.random() * 14;
-    case WORKER_STATES.BREAK:
-      return 4 + Math.random() * 3;
-    case WORKER_STATES.WALKING:
-      return 3 + Math.random() * 2;
-    default:
-      return 5;
+    case WORKER_STATES.WORKING: return 20 + Math.random() * 14;
+    case WORKER_STATES.BREAK:   return 4  + Math.random() * 3;
+    case WORKER_STATES.WALKING: return 3  + Math.random() * 2;
+    default: return 5;
   }
 }
 
