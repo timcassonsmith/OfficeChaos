@@ -13,12 +13,12 @@ export interface SceneDesk extends ScenePoint {
 
 /** Six cubicle seats aligned to office-bg.png (1024×896) */
 export const SCENE_DESKS: SceneDesk[] = [
-  { wx: 0.19, wy: 0.54,  seatWx: 0.19, seatWy: 0.575 },
-  { wx: 0.19, wy: 0.655, seatWx: 0.19, seatWy: 0.69  },
-  { wx: 0.19, wy: 0.77,  seatWx: 0.19, seatWy: 0.805 },
-  { wx: 0.81, wy: 0.54,  seatWx: 0.81, seatWy: 0.575 },
-  { wx: 0.81, wy: 0.655, seatWx: 0.81, seatWy: 0.69  },
-  { wx: 0.81, wy: 0.77,  seatWx: 0.81, seatWy: 0.805 },
+  { wx: 0.19, wy: 0.54,  seatWx: 0.19, seatWy: 0.58  },
+  { wx: 0.19, wy: 0.655, seatWx: 0.19, seatWy: 0.695 },
+  { wx: 0.19, wy: 0.77,  seatWx: 0.19, seatWy: 0.810 },
+  { wx: 0.79, wy: 0.54,  seatWx: 0.79, seatWy: 0.58  },
+  { wx: 0.79, wy: 0.655, seatWx: 0.79, seatWy: 0.695 },
+  { wx: 0.79, wy: 0.77,  seatWx: 0.79, seatWy: 0.810 },
 ];
 
 export const SCENE_POI = {
@@ -43,14 +43,14 @@ export interface Obstacle {
  * Characters must walk AROUND these, not through them.
  */
 export const DESK_OBSTACLES: Obstacle[] = [
-  // Left column (wx 0.06-0.29)
-  { x1: 0.06, y1: 0.535, x2: 0.29, y2: 0.625 }, // row 1 (seat wy 0.575)
-  { x1: 0.06, y1: 0.650, x2: 0.29, y2: 0.740 }, // row 2 (seat wy 0.69)
-  { x1: 0.06, y1: 0.765, x2: 0.29, y2: 0.855 }, // row 3 (seat wy 0.805)
-  // Right column (wx 0.71-0.94)
-  { x1: 0.71, y1: 0.535, x2: 0.94, y2: 0.625 }, // row 1
-  { x1: 0.71, y1: 0.650, x2: 0.94, y2: 0.740 }, // row 2
-  { x1: 0.71, y1: 0.765, x2: 0.94, y2: 0.855 }, // row 3
+  // Left column (wx 0.06-0.29) — calibrated to office-bg.png 1024×896
+  { x1: 0.06, y1: 0.51, x2: 0.29, y2: 0.645 }, // row 1
+  { x1: 0.06, y1: 0.648, x2: 0.29, y2: 0.768 }, // row 2
+  { x1: 0.06, y1: 0.771, x2: 0.29, y2: 0.860 }, // row 3
+  // Right column (wx 0.69-0.94) — right cluster starts at 0.69, not 0.71
+  { x1: 0.69, y1: 0.51, x2: 0.94, y2: 0.645 }, // row 1
+  { x1: 0.69, y1: 0.648, x2: 0.94, y2: 0.768 }, // row 2
+  { x1: 0.69, y1: 0.771, x2: 0.94, y2: 0.860 }, // row 3
 ];
 
 /**
@@ -58,9 +58,9 @@ export const DESK_OBSTACLES: Obstacle[] = [
  * Any path that stays in wx [LEFT_AISLE..RIGHT_AISLE] is obstacle-free.
  */
 const LEFT_AISLE  = 0.30;
-const RIGHT_AISLE = 0.70;
+const RIGHT_AISLE = 0.68; // right desks start at 0.69, keep aisle edge at 0.68
 /** wy above which the entire width is obstacle-free (the break-room / back-wall area) */
-const DESK_TOP    = 0.53;
+const DESK_TOP    = 0.51;
 
 // ---------------------------------------------------------------------------
 // Path planning

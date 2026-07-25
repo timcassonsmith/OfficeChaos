@@ -1,6 +1,7 @@
 import type { SkCanvas, SkImage } from '@shopify/react-native-skia';
 import { Skia } from '@shopify/react-native-skia';
 import type { BgLayout } from './sceneLayout';
+import type { SpriteFrame } from './spriteAtlas';
 
 const _bgPaint = Skia.Paint();
 const _skyPaint = Skia.Paint();
@@ -39,6 +40,42 @@ export function drawBackgroundImage(
   );
 
   return { offsetX: dx, offsetY: dy, drawW: dw, drawH: dh, imgW: iw, imgH: ih };
+}
+
+const _charPaint = Skia.Paint();
+
+/**
+ * Draw a single sprite-sheet character.
+ * cx/cy = screen position of the character's feet (bottom-centre).
+ * flip = true → mirror horizontally (facing left).
+ * scaleMul = extra size multiplier (use >1 for boss).
+ */
+export function drawSpriteCharacter(
+  canvas: SkCanvas,
+  sheet: SkImage,
+  frame: SpriteFrame,
+  cx: number,
+  cy: number,
+  bg: BgLayout,
+  flip: boolean,
+  scaleMul: number = 1,
+) {
+  const destH = bg.drawH * 0.165 * scaleMul;
+  const destW = (frame.w / frame.h) * destH;
+  const sx = cx - destW / 2;
+  const sy = cy - destH;
+
+  const srcRect = Skia.XYWHRect(frame.x, frame.y, frame.w, frame.h);
+  const dstRect = Skia.XYWHRect(sx, sy, destW, destH);
+
+  canvas.save();
+  if (flip) {
+    // Mirror horizontally around cx: translate(2*cx,0) then scale(-1,1)
+    canvas.translate(2 * cx, 0);
+    canvas.scale(-1, 1);
+  }
+  canvas.drawImageRect(sheet, srcRect, dstRect, _charPaint, false);
+  canvas.restore();
 }
 
 export function drawSelectionRing(

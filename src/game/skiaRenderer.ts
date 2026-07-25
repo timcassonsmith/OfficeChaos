@@ -31,13 +31,15 @@ export function drawScene(canvas: SkCanvas, game: GameEngine, time: number) {
   ];
   entities.sort((a, b) => a.sort - b.sort);
 
+  const sheet = game.spriteSheet ?? null;
+
   for (const { kind, entity } of entities) {
     if (kind === 'worker') {
-      drawCharacterAtPos(canvas, entity as Worker, bg, time);
+      drawCharacterAtPos(canvas, entity as Worker, bg, time, sheet);
     } else {
       const boss = entity as Boss;
       if (boss.active) {
-        drawBossAtPos(canvas, boss, bg, time);
+        drawBossAtPos(canvas, boss, bg, time, sheet);
       }
     }
   }

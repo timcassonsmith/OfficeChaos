@@ -331,7 +331,8 @@ export class GameEngine {
     const add = (wx: number, wy: number, text: string | null, key: string) => {
       if (!text) return;
       const pos = normToScreen(wx, wy, this.bgLayout!);
-      overlays.push({ x: pos.x, y: pos.y - this.bgLayout!.drawH * 0.08, text, key });
+      // Position bubble above character's head (sprites are ~16.5% of drawH tall)
+      overlays.push({ x: pos.x, y: pos.y - this.bgLayout!.drawH * 0.20, text, key });
     };
 
     for (const w of this.workers) {

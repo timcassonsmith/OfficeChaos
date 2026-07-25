@@ -17,8 +17,8 @@ export function SpeechBubbles({ bubbles }: { bubbles: Bubble[] }) {
           style={[
             styles.bubble,
             {
-              left: b.x - 18,
-              top: b.y - 14,
+              left: b.x - 12,
+              top: b.y - 10,
             },
           ]}
         >
@@ -32,17 +32,17 @@ export function SpeechBubbles({ bubbles }: { bubbles: Bubble[] }) {
 const styles = StyleSheet.create({
   bubble: {
     position: 'absolute',
-    minWidth: 36,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 2,
+    minWidth: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    backgroundColor: '#ffffffee',
+    borderRadius: 5,
+    borderWidth: 1,
     borderColor: '#37474f',
     alignItems: 'center',
   },
   text: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
     color: '#212529',
   },

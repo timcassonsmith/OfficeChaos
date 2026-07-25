@@ -1,10 +1,12 @@
-import type { SkCanvas } from '@shopify/react-native-skia';
+import type { SkCanvas, SkImage } from '@shopify/react-native-skia';
 import { WORKER_STATES, getGameScale, setGameScale } from './constants';
 import type { Worker, Boss } from './entities';
 import type { CharacterProfile } from './profiles';
 import type { BgLayout } from './sceneLayout';
 import { normToScreen } from './sceneLayout';
 import { skPaint, strokePaint } from './sprites';
+import { getSpriteFrame, BOSS_SPRITE_ID } from './spriteAtlas';
+import { drawSpriteCharacter, drawSelectionRing } from './spriteRenderer';
 
 function px(v: number) {
   return v * getGameScale();
@@ -29,12 +31,23 @@ export function drawCharacterAtPos(
   w: Worker,
   bg: BgLayout,
   time: number,
+  spriteSheet?: SkImage | null,
 ) {
-  const saved = getGameScale();
-  setGameScale(scaleForBg(bg));
   const { x: cx, y: cy } = normToScreen(w.wx, w.wy, bg);
-  drawPixelCharacter(canvas, w, cx, cy, time);
-  setGameScale(saved);
+
+  if (spriteSheet) {
+    const frame = getSpriteFrame(w.spriteId);
+    const flip = w.facing < 0;
+    drawSpriteCharacter(canvas, spriteSheet, frame, cx, cy, bg, flip);
+    // Selection/alert ring
+    if (w.selected) drawSelectionRing(canvas, w.wx, w.wy, bg, '#22c55e');
+    if (w.isSleepyTarget) drawSelectionRing(canvas, w.wx, w.wy, bg, '#ef4444');
+  } else {
+    const saved = getGameScale();
+    setGameScale(scaleForBg(bg));
+    drawPixelCharacter(canvas, w, cx, cy, time);
+    setGameScale(saved);
+  }
 }
 
 export function drawBossAtPos(
@@ -42,12 +55,21 @@ export function drawBossAtPos(
   boss: Boss,
   bg: BgLayout,
   time: number,
+  spriteSheet?: SkImage | null,
 ) {
-  const saved = getGameScale();
-  setGameScale(scaleForBg(bg));
   const { x: cx, y: cy } = normToScreen(boss.wx, boss.wy, bg);
-  drawPixelBoss(canvas, boss, cx, cy, time);
-  setGameScale(saved);
+
+  if (spriteSheet) {
+    const frame = getSpriteFrame(BOSS_SPRITE_ID);
+    const flip = boss.facing !== undefined ? boss.facing < 0 : false;
+    drawSpriteCharacter(canvas, spriteSheet, frame, cx, cy, bg, flip, 1.3);
+    drawSelectionRing(canvas, boss.wx, boss.wy, bg, '#ef4444');
+  } else {
+    const saved = getGameScale();
+    setGameScale(scaleForBg(bg));
+    drawPixelBoss(canvas, boss, cx, cy, time);
+    setGameScale(saved);
+  }
 }
 
 /** Chibi pixel character inspired by reference sprite sheet */

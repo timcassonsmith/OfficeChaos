@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Canvas, Picture, Skia, useImage, type SkPicture } from '@shopify/react-native-skia';
-// office-sprites.png is no longer used for in-game rendering (procedural characters only)
+// office-sprites.png — RGBA sprite sheet with 5 character sprites (verified pixel scan)
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -26,6 +26,7 @@ export default function GameScreen({ profiles, difficulty, onExit }: Props) {
   const { width, height } = useWindowDimensions();
   const rawInsets = useSafeAreaInsets();
   const bgImage = useImage(require('../../assets/office-bg.png'));
+  const spriteSheet = useImage(require('../../assets/office-sprites.png'));
   const game = useMemo(() => new GameEngine(), []);
   const lastTime = useRef(0);
   const lastPictureTime = useRef(0);
@@ -70,6 +71,10 @@ export default function GameScreen({ profiles, difficulty, onExit }: Props) {
   useEffect(() => {
     game.setBackgroundImage(bgImage ?? null);
   }, [game, bgImage]);
+
+  useEffect(() => {
+    game.setSpriteSheet(spriteSheet ?? null);
+  }, [game, spriteSheet]);
 
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});

@@ -1,6 +1,6 @@
 import type { CharacterProfile } from './profiles';
 
-/** Pixel rects on office-sprites.png (602×512) */
+/** Pixel rects on office-sprites.png (256×160 RGBA) – verified by pixel scan */
 export interface SpriteFrame {
   id: string;
   x: number;
@@ -13,11 +13,11 @@ export interface SpriteFrame {
 export const SPRITE_SHEET_SIZE = { w: 256, h: 160 };
 
 export const CHARACTER_SPRITES: SpriteFrame[] = [
-  { id: 'male_dark', x: 3, y: 32, w: 48, h: 74, label: 'Dark hair · blue shirt' },
-  { id: 'male_red', x: 53, y: 32, w: 48, h: 74, label: 'Red hair · white shirt' },
-  { id: 'male_grey', x: 103, y: 32, w: 48, h: 74, label: 'Grey hair · glasses' },
-  { id: 'female_red', x: 153, y: 32, w: 48, h: 74, label: 'Red hair · blue top' },
-  { id: 'female_black', x: 203, y: 32, w: 48, h: 74, label: 'Black hair · red top' },
+  { id: 'male_dark',   x: 2,  y: 105, w: 15, h: 23, label: 'Dark hair · blue shirt' },
+  { id: 'male_red',    x: 19, y: 104, w: 19, h: 24, label: 'Red hair · white shirt' },
+  { id: 'male_grey',   x: 40, y: 107, w: 13, h: 21, label: 'Grey hair · glasses' },
+  { id: 'female_red',  x: 3,  y: 132, w: 17, h: 23, label: 'Red hair · blue top' },
+  { id: 'female_dark', x: 22, y: 132, w: 17, h: 23, label: 'Dark hair · teal top' },
 ];
 
 export const BOSS_SPRITE_ID = 'male_grey';
