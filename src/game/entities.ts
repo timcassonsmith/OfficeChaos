@@ -1,5 +1,6 @@
 import {
   BOSS_ACTIONS,
+  CHAT_PHRASES,
   COLORS,
   CONFIG,
   GAME_PHASE,
@@ -60,6 +61,8 @@ export class Worker {
   atDesk = true;
   typingPhase = 0;
   breakSpot: ScenePoint | null = null;
+  chatPartnerId: string | null = null;
+  chatDuration = 6;
 
   constructor(index: number, desk: SceneDesk, profile?: CharacterProfile) {
     this.index = index;
@@ -85,7 +88,28 @@ export class Worker {
     this.wy = desk.seatWy;
     this.targetWx = desk.seatWx;
     this.targetWy = desk.seatWy;
+    this.atDesk = true;
     this.facing = desk.seatWx < 0.5 ? 1 : -1;
+  }
+
+  /** Instantly seat this worker at their desk (used at round start / becoming sleepy). */
+  seatAtDesk() {
+    this.wx = this.desk.seatWx;
+    this.wy = this.desk.seatWy;
+    this.targetWx = this.desk.seatWx;
+    this.targetWy = this.desk.seatWy;
+    this.waypoints = [];
+    this.atDesk = true;
+    this.onMission = null;
+    this.chatPartnerId = null;
+    this.facing = this.desk.seatWx < 0.5 ? 1 : -1;
+    if (
+      this.state !== WORKER_STATES.DROWSY &&
+      this.state !== WORKER_STATES.SLEEPING &&
+      this.state !== WORKER_STATES.DISTRACTING
+    ) {
+      this.state = WORKER_STATES.WORKING;
+    }
   }
 
   update(dt: number, game: GameEngine) {
@@ -95,7 +119,9 @@ export class Worker {
 
     if (this.bubbleTimer > 0) {
       this.bubbleTimer -= dt;
-      if (this.bubbleTimer <= 0 && !this.isSleepyTarget) this.bubble = null;
+      if (this.bubbleTimer <= 0 && !this.isSleepyTarget && this.state !== WORKER_STATES.CHATTING) {
+        this.bubble = null;
+      }
     }
     for (const k of Object.keys(this.cooldowns)) {
       this.cooldowns[k] = Math.max(0, this.cooldowns[k] - dt);
@@ -113,34 +139,49 @@ export class Worker {
       return;
     }
 
+    if (this.state === WORKER_STATES.CHATTING) {
+      this.updateChat(dt, game);
+      return;
+    }
+
     if (game.phase === GAME_PHASE.NORMAL || game.phase === GAME_PHASE.ALERT) {
       if (game.phase === GAME_PHASE.ALERT && !this.isSleepyTarget) {
+        // Only head back once — don't reset every frame
+        if (!this.atDesk && this.state !== WORKER_STATES.WALKING) {
+          this.state = WORKER_STATES.WORKING;
+          this.goToDesk();
+        } else if (this.atDesk) {
+          this.state = WORKER_STATES.WORKING;
+        }
+      } else if (game.phase === GAME_PHASE.NORMAL) {
+        this.updateRoutine(game);
+      }
+    } else if (game.phase === GAME_PHASE.BOSS && !this.isSleepyTarget && !this.onMission) {
+      if (!this.atDesk) {
         this.state = WORKER_STATES.WORKING;
         this.goToDesk();
       } else {
-        this.updateRoutine();
+        this.state = WORKER_STATES.WORKING;
       }
-    } else if (game.phase === GAME_PHASE.BOSS && !this.isSleepyTarget && !this.onMission) {
-      this.state = WORKER_STATES.WORKING;
-      this.goToDesk();
     }
     this.moveTowardTarget(dt);
     this.updateActivityBubble();
   }
 
   private updateSleepy(dt: number, game: GameEngine) {
+    // Cycle clear "zzz" text so sleep is obvious
+    const zCycle = Math.floor(this.anim * 1.5) % 3;
+    this.bubble = zCycle === 0 ? 'z' : zCycle === 1 ? 'zz' : 'zzz';
+    this.bubbleTimer = 999;
+
     if (this.state === WORKER_STATES.SLEEPING) return;
     const rate = (game.drowsyRate ?? 3.5) * (game.phase === GAME_PHASE.BOSS ? 1.4 : 1);
     this.wakeMeter += dt * rate;
     if (this.wakeMeter >= CONFIG.drowsyThreshold && this.state !== WORKER_STATES.DROWSY) {
       this.state = WORKER_STATES.DROWSY;
-      this.bubble = '💤';
-      this.bubbleTimer = 999;
     }
     if (this.wakeMeter >= CONFIG.sleepThreshold) {
       this.state = WORKER_STATES.SLEEPING;
-      this.bubble = '😴';
-      this.bubbleTimer = 999;
     }
   }
 
@@ -150,51 +191,166 @@ export class Worker {
     this.waypoints = [];
     this.wx = lerp(this.wx, this.desk.seatWx, Math.min(1, dt * 8));
     this.wy = lerp(this.wy, this.desk.seatWy, Math.min(1, dt * 8));
+    if (dist(this, { wx: this.desk.seatWx, wy: this.desk.seatWy }) < 0.008) {
+      this.wx = this.desk.seatWx;
+      this.wy = this.desk.seatWy;
+    }
     this.atDesk = true;
     this.facing = this.desk.seatWx < 0.5 ? 1 : -1;
   }
 
-  private updateRoutine() {
+  private updateRoutine(game: GameEngine) {
     if (this.stateTimer <= pickDuration(this.state)) return;
-    this.pickNextRoutine();
+    this.pickNextRoutine(game);
     this.stateTimer = 0;
   }
 
-  private pickNextRoutine() {
+  private pickNextRoutine(game: GameEngine) {
     const roll = Math.random();
-    if (roll < 0.88) {
+    if (roll < 0.72) {
       this.state = WORKER_STATES.WORKING;
       this.goToDesk();
-    } else if (roll < 0.96) {
+    } else if (roll < 0.84) {
+      this.startChat(game);
+    } else if (roll < 0.94) {
       this.state = WORKER_STATES.BREAK;
       const poi = pickRandom([SCENE_POI.vending, SCENE_POI.coffee, SCENE_POI.sofa, SCENE_POI.cooler]);
       this.breakSpot = { ...poi };
       this.startJourney(poi.wx, poi.wy);
       this.atDesk = false;
     } else {
-      // Wander — target is always in the safe centre aisle to avoid obstacles
       this.state = WORKER_STATES.WALKING;
       this.atDesk = false;
-      const wanderX = 0.32 + Math.random() * 0.36; // 0.32–0.68 (centre aisle)
+      const wanderX = 0.32 + Math.random() * 0.36;
       const wanderY = clamp(this.desk.seatWy + (Math.random() * 0.12 - 0.06), 0.52, 0.88);
       this.startJourney(wanderX, wanderY);
     }
   }
 
+  private startChat(game: GameEngine) {
+    const partners = game.workers.filter(
+      (w) =>
+        w.id !== this.id &&
+        !w.isSleepyTarget &&
+        !w.onMission &&
+        w.state !== WORKER_STATES.CHATTING &&
+        w.state !== WORKER_STATES.DISTRACTING,
+    );
+    if (partners.length === 0) {
+      this.state = WORKER_STATES.WORKING;
+      this.goToDesk();
+      return;
+    }
+    const partner = pickRandom(partners);
+    // Meet in the aisle between them
+    const meetWx = clamp((this.wx + partner.wx) / 2, 0.34, 0.66);
+    const meetWy = clamp((this.wy + partner.wy) / 2, 0.52, 0.82);
+
+    this.state = WORKER_STATES.WALKING;
+    this.atDesk = false;
+    this.chatPartnerId = partner.id;
+    this.onMission = {
+      type: 'walk',
+      wx: meetWx - 0.015,
+      wy: meetWy,
+      pathStarted: false,
+      onArrive: (w, g) => {
+        w.onMission = null;
+        w.state = WORKER_STATES.CHATTING;
+        w.stateTimer = 0;
+        w.chatDuration = 5 + Math.random() * 3;
+        w.bubble = pickRandom(CHAT_PHRASES);
+        w.bubbleTimer = 3;
+        const other = g.workers.find((x) => x.id === w.chatPartnerId);
+        if (other && !other.isSleepyTarget) {
+          other.onMission = null;
+          other.chatPartnerId = w.id;
+          other.state = WORKER_STATES.CHATTING;
+          other.stateTimer = 0;
+          other.chatDuration = w.chatDuration;
+          other.bubble = pickRandom(CHAT_PHRASES);
+          other.bubbleTimer = 3;
+          other.facing = other.wx < w.wx ? 1 : -1;
+          w.facing = w.wx < other.wx ? 1 : -1;
+        }
+      },
+    };
+
+    // Partner also walks to the meetup if free
+    if (!partner.onMission && partner.state !== WORKER_STATES.CHATTING) {
+      partner.state = WORKER_STATES.WALKING;
+      partner.atDesk = false;
+      partner.chatPartnerId = this.id;
+      partner.onMission = {
+        type: 'walk',
+        wx: meetWx + 0.015,
+        wy: meetWy,
+        pathStarted: false,
+        onArrive: (w) => {
+          w.onMission = null;
+          if (w.state !== WORKER_STATES.CHATTING) {
+            w.state = WORKER_STATES.CHATTING;
+            w.stateTimer = 0;
+          }
+        },
+      };
+    }
+  }
+
+  private updateChat(_dt: number, game: GameEngine) {
+    const partner = game.workers.find((w) => w.id === this.chatPartnerId);
+    if (!partner || partner.isSleepyTarget) {
+      this.endChat();
+      return;
+    }
+    if (this.bubbleTimer <= 0) {
+      this.bubble = pickRandom(CHAT_PHRASES);
+      this.bubbleTimer = 2.5 + Math.random();
+    }
+    this.facing = partner.wx >= this.wx ? 1 : -1;
+    if (this.stateTimer > this.chatDuration) {
+      this.endChat();
+      if (partner.chatPartnerId === this.id && partner.state === WORKER_STATES.CHATTING) {
+        partner.endChat();
+      }
+    }
+  }
+
+  private endChat() {
+    this.chatPartnerId = null;
+    this.state = WORKER_STATES.WORKING;
+    this.stateTimer = 0;
+    this.bubble = null;
+    this.goToDesk();
+  }
+
   private updateActivityBubble() {
     if (this.isSleepyTarget || this.onMission) return;
     if (this.state === WORKER_STATES.WORKING && this.atDesk) {
-      if (Math.sin(this.typingPhase * 0.8) > 0.85) {
+      // Only refresh when the previous bubble has expired — prevents emoji thrashing
+      if (this.bubbleTimer <= 0) {
         this.bubble = pickRandom(['⌨️', '📊', '📝', '💼', '📧']);
-        this.bubbleTimer = 2.2;
+        this.bubbleTimer = 4.5 + Math.random() * 2.5;
       }
     } else if (this.state === WORKER_STATES.BREAK && this.breakSpot && dist(this, this.breakSpot) < 0.03) {
-      this.bubble = pickRandom(['☕', '🥤', '💬']);
-      this.bubbleTimer = 2.5;
+      if (this.bubbleTimer <= 0) {
+        this.bubble = pickRandom(['☕', '🥤', '💬']);
+        this.bubbleTimer = 3.5 + Math.random() * 1.5;
+      }
     }
   }
 
   goToDesk() {
+    // Already seated — stay put
+    if (
+      this.atDesk &&
+      dist(this, { wx: this.desk.seatWx, wy: this.desk.seatWy }) < 0.02 &&
+      this.waypoints.length === 0
+    ) {
+      this.targetWx = this.desk.seatWx;
+      this.targetWy = this.desk.seatWy;
+      return;
+    }
     this.startJourney(this.desk.seatWx, this.desk.seatWy);
     this.atDesk = false;
   }
@@ -229,12 +385,23 @@ export class Worker {
       this.wy = this.targetWy;
 
       if (this.waypoints.length > 0) {
-        // Advance to next waypoint
         this.targetWx = this.waypoints[0].wx;
         this.targetWy = this.waypoints[0].wy;
         this.waypoints = this.waypoints.slice(1);
       } else {
-        if (this.state === WORKER_STATES.WORKING) this.atDesk = true;
+        // Arrived at final destination
+        if (
+          this.state === WORKER_STATES.WORKING ||
+          this.state === WORKER_STATES.DROWSY ||
+          this.state === WORKER_STATES.SLEEPING
+        ) {
+          if (dist(this, { wx: this.desk.seatWx, wy: this.desk.seatWy }) < 0.03) {
+            this.atDesk = true;
+            this.wx = this.desk.seatWx;
+            this.wy = this.desk.seatWy;
+            this.facing = this.desk.seatWx < 0.5 ? 1 : -1;
+          }
+        }
       }
       return;
     }
@@ -243,7 +410,6 @@ export class Worker {
     let newWx = this.wx + (dx / d) * speed;
     let newWy = this.wy + (dy / d) * speed;
 
-    // Final destination for obstacle-avoidance check
     const finalDestWx = this.waypoints.length > 0
       ? this.waypoints[this.waypoints.length - 1].wx
       : this.targetWx;
@@ -261,7 +427,6 @@ export class Worker {
   private updateMission(dt: number, game: GameEngine) {
     const m = this.onMission!;
     if (m.type === 'walk') {
-      // Plan path only once, on the first frame of this mission
       if (!m.pathStarted) {
         this.startJourney(m.wx, m.wy);
         m.pathStarted = true;
@@ -295,6 +460,7 @@ export class Worker {
       this.state = WORKER_STATES.WORKING;
       this.bubble = '✨';
       this.bubbleTimer = 2;
+      this.atDesk = true;
       return true;
     }
     return false;
@@ -460,9 +626,10 @@ type Mission =
 
 function pickDuration(state: WorkerState) {
   switch (state) {
-    case WORKER_STATES.WORKING: return 20 + Math.random() * 14;
+    case WORKER_STATES.WORKING: return 18 + Math.random() * 12;
     case WORKER_STATES.BREAK:   return 4  + Math.random() * 3;
     case WORKER_STATES.WALKING: return 3  + Math.random() * 2;
+    case WORKER_STATES.CHATTING: return 6;
     default: return 5;
   }
 }

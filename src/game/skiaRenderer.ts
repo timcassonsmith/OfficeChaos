@@ -1,5 +1,4 @@
 import type { SkCanvas } from '@shopify/react-native-skia';
-import { WORKER_STATES } from './constants';
 import type { GameEngine } from './GameEngine';
 import type { Boss, Worker } from './entities';
 import { normToScreen } from './sceneLayout';

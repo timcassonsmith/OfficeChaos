@@ -61,10 +61,13 @@ export const WORKER_STATES = {
   WORKING: 'working',
   BREAK: 'break',
   WALKING: 'walking',
+  CHATTING: 'chatting',
   DROWSY: 'drowsy',
   SLEEPING: 'sleeping',
   DISTRACTING: 'distracting',
 } as const;
+
+export const CHAT_PHRASES = ['Hey!', 'lol', '😮', 'Yep', 'Nice!', 'Hmm…', '☕?', '😂'];
 
 export type WorkerState = (typeof WORKER_STATES)[keyof typeof WORKER_STATES];
 

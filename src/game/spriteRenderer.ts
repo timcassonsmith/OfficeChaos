@@ -44,11 +44,13 @@ export function drawBackgroundImage(
 
 const _charPaint = Skia.Paint();
 
+export type CharPose = 'stand' | 'sit' | 'sleep';
+
 /**
  * Draw a single sprite-sheet character.
  * cx/cy = screen position of the character's feet (bottom-centre).
  * flip = true → mirror horizontally (facing left).
- * scaleMul = extra size multiplier (use >1 for boss).
+ * pose: sit = shorter seated figure; sleep = face-planted on desk.
  */
 export function drawSpriteCharacter(
   canvas: SkCanvas,
@@ -59,23 +61,79 @@ export function drawSpriteCharacter(
   bg: BgLayout,
   flip: boolean,
   scaleMul: number = 1,
+  pose: CharPose = 'stand',
 ) {
-  const destH = bg.drawH * 0.165 * scaleMul;
+  const standH = bg.drawH * 0.165 * scaleMul;
+  const sitH = standH * 0.72;
+  const destH = pose === 'stand' ? standH : sitH;
   const destW = (frame.w / frame.h) * destH;
-  const sx = cx - destW / 2;
-  const sy = cy - destH;
-
   const srcRect = Skia.XYWHRect(frame.x, frame.y, frame.w, frame.h);
-  const dstRect = Skia.XYWHRect(sx, sy, destW, destH);
 
   canvas.save();
-  if (flip) {
-    // Mirror horizontally around cx: translate(2*cx,0) then scale(-1,1)
-    canvas.translate(2 * cx, 0);
-    canvas.scale(-1, 1);
+
+  if (pose === 'sleep') {
+    // Face-plant toward the desk (lean forward onto the surface)
+    const lean = flip ? 1.05 : -1.05; // radians ≈ 60°
+    const pivotX = cx;
+    const pivotY = cy - destH * 0.35;
+    canvas.translate(pivotX, pivotY);
+    canvas.rotate((lean * 180) / Math.PI, 0, 0);
+    if (flip) {
+      canvas.scale(-1, 1);
+    }
+    canvas.drawImageRect(
+      sheet,
+      srcRect,
+      Skia.XYWHRect(-destW / 2, -destH * 0.55, destW, destH * 0.85),
+      _charPaint,
+      false,
+    );
+  } else {
+    const sx = cx - destW / 2;
+    const sy = cy - destH;
+    if (flip) {
+      canvas.translate(2 * cx, 0);
+      canvas.scale(-1, 1);
+    }
+    canvas.drawImageRect(sheet, srcRect, Skia.XYWHRect(sx, sy, destW, destH), _charPaint, false);
   }
-  canvas.drawImageRect(sheet, srcRect, dstRect, _charPaint, false);
+
   canvas.restore();
+}
+
+/** Floating Z / z / Z particles rising from a sleeping/drowsy worker's head */
+export function drawSleepZzz(
+  canvas: SkCanvas,
+  cx: number,
+  cy: number,
+  bg: BgLayout,
+  time: number,
+  heavy: boolean,
+) {
+  const baseY = cy - bg.drawH * (heavy ? 0.10 : 0.14);
+  const count = heavy ? 3 : 2;
+  const fontSize = Math.max(10, bg.drawH * (heavy ? 0.028 : 0.022));
+
+  for (let i = 0; i < count; i++) {
+    const phase = time * (heavy ? 1.1 : 0.7) + i * 1.7;
+    const t = (phase % 2.8) / 2.8;
+    const rise = t * bg.drawH * 0.08;
+    const sway = Math.sin(phase * 2.2) * bg.drawH * 0.012;
+    const alpha = Math.max(0.15, 1 - t);
+    const size = fontSize * (0.75 + i * 0.18);
+    const x = cx + sway + (i - 1) * bg.drawH * 0.02;
+    const y = baseY - rise;
+
+    const p = Skia.Paint();
+    p.setColor(Skia.Color('#2563eb'));
+    p.setAlphaf(alpha);
+    p.setStrokeWidth(Math.max(1.5, size * 0.18));
+    p.setStyle(1); // stroke
+    // Pixel-style "Z"
+    canvas.drawLine(x - size * 0.35, y - size * 0.4, x + size * 0.35, y - size * 0.4, p);
+    canvas.drawLine(x + size * 0.35, y - size * 0.4, x - size * 0.35, y + size * 0.4, p);
+    canvas.drawLine(x - size * 0.35, y + size * 0.4, x + size * 0.35, y + size * 0.4, p);
+  }
 }
 
 export function drawSelectionRing(

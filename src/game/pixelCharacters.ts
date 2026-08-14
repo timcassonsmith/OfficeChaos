@@ -6,7 +6,7 @@ import type { BgLayout } from './sceneLayout';
 import { normToScreen } from './sceneLayout';
 import { skPaint, strokePaint } from './sprites';
 import { getSpriteFrame, BOSS_SPRITE_ID } from './spriteAtlas';
-import { drawSpriteCharacter, drawSelectionRing } from './spriteRenderer';
+import { drawSpriteCharacter, drawSelectionRing, drawSleepZzz, type CharPose } from './spriteRenderer';
 
 function px(v: number) {
   return v * getGameScale();
@@ -25,6 +25,12 @@ function scaleForBg(bg: BgLayout) {
   return Math.max(0.45, Math.min(1.8, bg.drawH * 0.13 / 68));
 }
 
+function poseForWorker(w: Worker): CharPose {
+  if (w.state === WORKER_STATES.SLEEPING && (w.atDesk || w.isSleepyTarget)) return 'sleep';
+  if (w.isSitting()) return 'sit';
+  return 'stand';
+}
+
 /** Draw a character at normalised (wx, wy) position over the background. */
 export function drawCharacterAtPos(
   canvas: SkCanvas,
@@ -34,19 +40,25 @@ export function drawCharacterAtPos(
   spriteSheet?: SkImage | null,
 ) {
   const { x: cx, y: cy } = normToScreen(w.wx, w.wy, bg);
+  const pose = poseForWorker(w);
 
   if (spriteSheet) {
     const frame = getSpriteFrame(w.spriteId);
     const flip = w.facing < 0;
-    drawSpriteCharacter(canvas, spriteSheet, frame, cx, cy, bg, flip);
-    // Selection/alert ring
+    drawSpriteCharacter(canvas, spriteSheet, frame, cx, cy, bg, flip, 1, pose);
     if (w.selected) drawSelectionRing(canvas, w.wx, w.wy, bg, '#22c55e');
     if (w.isSleepyTarget) drawSelectionRing(canvas, w.wx, w.wy, bg, '#ef4444');
+    if (w.state === WORKER_STATES.SLEEPING || w.state === WORKER_STATES.DROWSY) {
+      drawSleepZzz(canvas, cx, cy, bg, time, w.state === WORKER_STATES.SLEEPING);
+    }
   } else {
     const saved = getGameScale();
     setGameScale(scaleForBg(bg));
     drawPixelCharacter(canvas, w, cx, cy, time);
     setGameScale(saved);
+    if (w.state === WORKER_STATES.SLEEPING || w.state === WORKER_STATES.DROWSY) {
+      drawSleepZzz(canvas, cx, cy, bg, time, w.state === WORKER_STATES.SLEEPING);
+    }
   }
 }
 
@@ -62,7 +74,7 @@ export function drawBossAtPos(
   if (spriteSheet) {
     const frame = getSpriteFrame(BOSS_SPRITE_ID);
     const flip = boss.facing !== undefined ? boss.facing < 0 : false;
-    drawSpriteCharacter(canvas, spriteSheet, frame, cx, cy, bg, flip, 1.3);
+    drawSpriteCharacter(canvas, spriteSheet, frame, cx, cy, bg, flip, 1.3, 'stand');
     drawSelectionRing(canvas, boss.wx, boss.wy, bg, '#ef4444');
   } else {
     const saved = getGameScale();

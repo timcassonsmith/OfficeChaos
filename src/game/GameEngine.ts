@@ -109,7 +109,8 @@ export class GameEngine {
       w.state = WORKER_STATES.WORKING;
       w.onMission = null;
       w.bubble = null;
-      w.goToDesk();
+      w.chatPartnerId = null;
+      w.seatAtDesk();
     }
 
     this.setStatus('Tap a coworker on the left panel, then pick a wake-up action!');
@@ -170,14 +171,20 @@ export class GameEngine {
     this.drowsyStartDelay -= dt;
     if (this.drowsyStartDelay > 0) return;
 
-    const candidates = this.workers.filter((w) => w.state === WORKER_STATES.WORKING);
-    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    const candidates = this.workers.filter(
+      (w) => w.state === WORKER_STATES.WORKING || w.state === WORKER_STATES.CHATTING || w.atDesk,
+    );
+    const atDeskFirst = candidates.filter((w) => w.atDesk);
+    const pool = atDeskFirst.length > 0 ? atDeskFirst : candidates;
+    const target = pool[Math.floor(Math.random() * pool.length)];
     if (!target) return;
 
+    // Force them into their chair before nodding off
+    target.seatAtDesk();
     target.isSleepyTarget = true;
     target.wakeMeter = 20;
     target.state = WORKER_STATES.DROWSY;
-    target.bubble = '💤';
+    target.bubble = 'z';
     target.bubbleTimer = 999;
     this.sleepyWorkerId = target.id;
     this.phase = GAME_PHASE.ALERT;
@@ -325,18 +332,27 @@ export class GameEngine {
   }
 
   getBubbleOverlays() {
-    const overlays: { x: number; y: number; text: string; key: string }[] = [];
+    const overlays: { x: number; y: number; text: string; key: string; kind?: string }[] = [];
     if (!this.bgLayout) return overlays;
 
-    const add = (wx: number, wy: number, text: string | null, key: string) => {
+    const add = (wx: number, wy: number, text: string | null, key: string, kind?: string) => {
       if (!text) return;
       const pos = normToScreen(wx, wy, this.bgLayout!);
-      // Position bubble above character's head (sprites are ~16.5% of drawH tall)
-      overlays.push({ x: pos.x, y: pos.y - this.bgLayout!.drawH * 0.20, text, key });
+      // Sleep bubbles sit higher so they don't cover the face-planted sprite
+      const lift = kind === 'sleep' ? 0.22 : 0.18;
+      overlays.push({ x: pos.x, y: pos.y - this.bgLayout!.drawH * lift, text, key, kind });
     };
 
     for (const w of this.workers) {
-      if (w.bubble) add(w.wx, w.wy, w.bubble, w.id);
+      if (w.bubble) {
+        const kind =
+          w.state === WORKER_STATES.SLEEPING || w.state === WORKER_STATES.DROWSY
+            ? 'sleep'
+            : w.state === WORKER_STATES.CHATTING
+              ? 'chat'
+              : 'normal';
+        add(w.wx, w.wy, w.bubble, w.id, kind);
+      }
     }
     if (this.boss.active) {
       add(this.boss.wx, this.boss.wy, this.boss.delayTimer > 0 ? '💬' : '👁️', 'boss');

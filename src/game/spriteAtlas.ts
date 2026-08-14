@@ -42,14 +42,14 @@ export function pickSpriteId(profile: CharacterProfile, index: number): string {
 
   if (profile.sex === 'female') {
     if (colorMatch(hair, ['c03', 'e74', 'red', '924', 'a855'])) return 'female_red';
-    return 'female_black';
+    return 'female_dark';
   }
 
   if (colorMatch(hair, ['7f8', '94a', 'grey', '647'])) return 'male_grey';
   if (colorMatch(hair, ['c03', '924', '5c3', 'brown', 'd4a'])) return 'male_red';
   if (colorMatch(outfit, ['636', '647', '475'])) return 'male_dark';
 
-  const defaults = ['male_dark', 'female_red', 'male_red', 'female_black', 'male_grey', 'female_red'];
+  const defaults = ['male_dark', 'female_red', 'male_red', 'female_dark', 'male_grey', 'female_red'];
   return defaults[index % defaults.length];
 }
 
