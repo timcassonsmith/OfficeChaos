@@ -1,0 +1,13 @@
+Office chaos
+
+oh sorry texting/ paper ball/ emailing/ calling all happen at their desk  and clearing throat - They have to be able to face the sleeping worker as well.  
+
+While at their desk or when standing an animation for them to drink
+
+note that the office workers are both male and female so need a set of sprites for each
+
+There needs to animation for each one of these movements
+
+Can you also create an office boss who , when an office work goes to sleep - appears from his office and starts to walk around the office desks to locate the sleeping worker
+
+also would need a office layout that includes a watercooler - vending machine - office desks with computers/laptops/mouse/keyboard, chair walls flooring pictures and office boards to go on walls - general office furniture etc 
